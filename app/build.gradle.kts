@@ -2,8 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     alias(libs.plugins.kotlin.compose)
-    kotlin("plugin.serialization") version "2.1.0"
-    id("kotlin-kapt")
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.1.0"
 }
 
 android {
@@ -71,7 +70,8 @@ dependencies {
     val room_version = "2.6.1"
     implementation("androidx.room:room-runtime:$room_version")
     implementation("androidx.room:room-ktx:$room_version")
-    kapt("androidx.room:room-compiler:$room_version")
+    // Use annotationProcessor as a fallback if KSP/Kapt is having issues
+    annotationProcessor("androidx.room:room-compiler:$room_version")
 
     // Coil (Image loading)
     implementation("io.coil-kt:coil-compose:2.6.0")
