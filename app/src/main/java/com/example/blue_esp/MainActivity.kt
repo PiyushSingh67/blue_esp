@@ -26,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -61,8 +60,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val serviceIntent = Intent(this, BluetoothService::class.java)
-        ContextCompat.startForegroundService(this, serviceIntent)
+        // Start Foreground Service
+        try {
+            val serviceIntent = Intent(this, BluetoothService::class.java)
+            ContextCompat.startForegroundService(this, serviceIntent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Start Ktor server
         Thread { startKtorServer() }.start()
 
         setContent {
@@ -119,7 +125,7 @@ fun DashboardScreen(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = { Text("Health Node Dashboard", fontWeight = FontWeight.Bold) },
                 actions = {
                     IconButton(onClick = { navController.navigate("profile") }) {
