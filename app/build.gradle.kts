@@ -73,6 +73,9 @@ dependencies {
     implementation("androidx.room:room-ktx:$room_version")
     kapt("androidx.room:room-compiler:$room_version")
 
+    // Coil (Image loading)
+    implementation("io.coil-kt:coil-compose:2.6.0")
+
     // Ktor
     val ktor_version = "2.3.12"
     implementation("io.ktor:ktor-server-core:$ktor_version")

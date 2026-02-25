@@ -1,11 +1,8 @@
 package com.example.blue_esp
 
 import android.Manifest
-import android.app.Activity
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothManager
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -15,13 +12,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleIcon
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -35,8 +29,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -128,7 +120,7 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("ESP32 Health Dashboard", fontWeight = FontWeight.Bold) },
+                title = { Text("Health Node Dashboard", fontWeight = FontWeight.Bold) },
                 actions = {
                     IconButton(onClick = { navController.navigate("profile") }) {
                         Icon(Icons.Default.AccountCircle, contentDescription = "Profile", modifier = Modifier.size(32.dp))
@@ -153,7 +145,12 @@ fun DashboardScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    val painter = rememberAsyncImagePainter(user?.profilePictureUri ?: Icons.Default.Person)
+                    val painter = if (user?.profilePictureUri != null) {
+                        rememberAsyncImagePainter(user.profilePictureUri)
+                    } else {
+                        rememberAsyncImagePainter(Icons.Default.Person)
+                    }
+                    
                     Image(
                         painter = painter,
                         contentDescription = "Profile Picture",
@@ -162,8 +159,8 @@ fun DashboardScreen(
                     )
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
-                        Text(user?.username ?: "New User", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text("Blood Group: ${user?.bloodGroup ?: "N/A"}", style = MaterialTheme.typography.bodyMedium)
+                        Text(user?.username ?: "Anonymous User", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("Blood Group: ${user?.bloodGroup ?: "Not Set"}", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
@@ -179,11 +176,11 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(espState.connectionStatus, fontWeight = FontWeight.Medium)
                     }
-                    Divider(modifier = Modifier.padding(vertical = 12.dp))
-                    Text("Received Data:", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                    Text("ESP32 Output:", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
                     Text(espState.lastReceivedData, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Last Updated: ${if(espState.timestamp == 0L) "Never" else SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(espState.timestamp))}", style = MaterialTheme.typography.bodySmall)
+                    Text("Updated: ${if(espState.timestamp == 0L) "N/A" else SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(espState.timestamp))}", style = MaterialTheme.typography.bodySmall)
                 }
             }
 
@@ -198,8 +195,8 @@ fun DashboardScreen(
                     Icon(Icons.Default.Dns, contentDescription = null)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("HTTP Bridge Active", fontWeight = FontWeight.Bold)
-                        Text("Port: 8080 | Endpoint: /status", style = MaterialTheme.typography.bodySmall)
+                        Text("Ktor Bridge Running", fontWeight = FontWeight.Bold)
+                        Text("LAN IP Port: 8080", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -224,7 +221,7 @@ fun ProfileEditScreen(navController: NavHostController, viewModel: UserViewModel
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Edit Profile") },
+                title = { Text("My Profile") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.Default.ArrowBack, "Back") }
                 }
@@ -233,7 +230,7 @@ fun ProfileEditScreen(navController: NavHostController, viewModel: UserViewModel
     ) { padding ->
         Column(modifier = Modifier.padding(padding).padding(16.dp).verticalScroll(rememberScrollState())) {
             Box(modifier = Modifier.align(Alignment.CenterHorizontally).clickable { launcher.launch("image/*") }) {
-                val painter = rememberAsyncImagePainter(imageUri ?: Icons.Default.Person)
+                val painter = if (imageUri != null) rememberAsyncImagePainter(imageUri) else rememberAsyncImagePainter(Icons.Default.Person)
                 Image(
                     painter = painter,
                     contentDescription = "Profile",
@@ -243,8 +240,9 @@ fun ProfileEditScreen(navController: NavHostController, viewModel: UserViewModel
                 Icon(Icons.Default.Edit, "Edit", modifier = Modifier.align(Alignment.BottomEnd).background(MaterialTheme.colorScheme.primary, CircleShape).padding(4.dp), tint = Color.White)
             }
 
-            OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Username") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Credentials (Email)") }, modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Full Name") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email/Credentials") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(value = age, onValueChange = { age = it }, label = { Text("Age") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(value = gender, onValueChange = { gender = it }, label = { Text("Gender") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(value = bloodGroup, onValueChange = { bloodGroup = it }, label = { Text("Blood Group") }, modifier = Modifier.fillMaxWidth())
@@ -264,7 +262,7 @@ fun ProfileEditScreen(navController: NavHostController, viewModel: UserViewModel
                 },
                 modifier = Modifier.fillMaxWidth().padding(top = 24.dp)
             ) {
-                Text("Save Profile")
+                Text("Save Changes")
             }
         }
     }
@@ -276,7 +274,7 @@ fun DeviceListScreen(navController: NavHostController, devices: List<BluetoothDe
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Select ESP32 Device") },
+                title = { Text("Nearby ESP32s") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.Default.ArrowBack, "Back") }
                 }
@@ -286,7 +284,7 @@ fun DeviceListScreen(navController: NavHostController, devices: List<BluetoothDe
         LazyColumn(modifier = Modifier.padding(padding)) {
             items(devices) { device ->
                 ListItem(
-                    headlineContent = { Text(device.name ?: "Unknown Device") },
+                    headlineContent = { Text(device.name ?: "Unnamed Device") },
                     supportingContent = { Text(device.address) },
                     leadingContent = { Icon(Icons.Default.Bluetooth, contentDescription = null) },
                     modifier = Modifier.clickable { 
