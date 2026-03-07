@@ -12,6 +12,8 @@ import androidx.lifecycle.AndroidViewModel
 import com.example.blue_esp.bluetooth.BluetoothService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.net.Inet4Address
+import java.net.NetworkInterface
 
 enum class ConnectionState {
     Disconnected,
@@ -30,6 +32,18 @@ class BluetoothViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _discoveredDevices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
     val discoveredDevices: StateFlow<List<BluetoothDevice>> = _discoveredDevices
+
+    private val _localIpAddress = MutableStateFlow(resolveLocalIp())
+    val localIpAddress: StateFlow<String> = _localIpAddress
+
+    private fun resolveLocalIp(): String = try {
+        NetworkInterface.getNetworkInterfaces()
+            ?.asSequence()
+            ?.filter { it.isUp && !it.isLoopback }
+            ?.flatMap { it.inetAddresses.asSequence() }
+            ?.firstOrNull { it is Inet4Address }
+            ?.hostAddress ?: "Unknown"
+    } catch (e: Exception) { "Unknown" }
 
     private var bluetoothService: BluetoothService? = null
 

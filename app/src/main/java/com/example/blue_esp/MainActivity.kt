@@ -38,7 +38,6 @@ import com.example.blue_esp.bluetooth.BluetoothService
 import com.example.blue_esp.database.User
 import com.example.blue_esp.server.EspDataRepository
 import com.example.blue_esp.server.EspState
-import com.example.blue_esp.server.startKtorServer
 import com.example.blue_esp.ui.theme.Blue_espTheme
 import com.example.blue_esp.viewmodel.BluetoothViewModel
 import com.example.blue_esp.viewmodel.ConnectionState
@@ -60,16 +59,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Start Foreground Service
+        // Start Foreground Service (hosts BLE connection + Ktor server)
         try {
             val serviceIntent = Intent(this, BluetoothService::class.java)
             ContextCompat.startForegroundService(this, serviceIntent)
         } catch (e: Exception) {
             e.printStackTrace()
         }
-
-        // Start Ktor server
-        Thread { startKtorServer() }.start()
 
         setContent {
             Blue_espTheme {
@@ -78,6 +74,7 @@ class MainActivity : ComponentActivity() {
                 val discoveredDevices by viewModel.discoveredDevices.collectAsState()
                 val espState by EspDataRepository.state.collectAsState()
                 val users by userViewModel.allUsers.collectAsState()
+                val localIp by viewModel.localIpAddress.collectAsState()
 
                 NavHost(navController = navController, startDestination = "dashboard") {
                     composable("dashboard") {
@@ -85,7 +82,8 @@ class MainActivity : ComponentActivity() {
                             navController, 
                             espState, 
                             connectionState, 
-                            users.firstOrNull(), 
+                            users.firstOrNull(),
+                            localIp,
                             onScanClick = { checkPermissions() }
                         )
                     }
@@ -121,6 +119,7 @@ fun DashboardScreen(
     espState: EspState,
     connectionState: ConnectionState,
     user: User?,
+    localIp: String,
     onScanClick: () -> Unit
 ) {
     Scaffold(
@@ -184,7 +183,36 @@ fun DashboardScreen(
                     }
                     HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
                     Text("ESP32 Output:", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
-                    Text(espState.lastReceivedData, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black)
+                    Text(espState.lastReceivedData, style = MaterialTheme.typography.bodyMedium)
+                    if (espState.temperature != null || espState.spO2 != null || espState.heartRate != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                        Text("Parsed Metrics", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.secondary)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            espState.temperature?.let {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.Thermostat, contentDescription = "Temperature", modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Text("${"%.1f".format(it)}°C", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text("Temp", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                            espState.spO2?.let {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.Favorite, contentDescription = "SpO2", modifier = Modifier.size(28.dp), tint = Color.Red)
+                                    Text("$it%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text("SpO₂", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                            espState.heartRate?.let {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(Icons.Default.MonitorHeart, contentDescription = "Heart Rate", modifier = Modifier.size(28.dp), tint = Color.Red)
+                                    Text("$it bpm", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text("Heart Rate", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                        }
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Updated: ${if(espState.timestamp == 0L) "N/A" else SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(espState.timestamp))}", style = MaterialTheme.typography.bodySmall)
                 }
@@ -202,7 +230,7 @@ fun DashboardScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text("Ktor Bridge Running", fontWeight = FontWeight.Bold)
-                        Text("LAN IP Port: 8080", style = MaterialTheme.typography.bodySmall)
+                        Text("$localIp:8080", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
