@@ -21,4 +21,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "blue_esp"
 include(":app")
- 

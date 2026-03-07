@@ -5,6 +5,7 @@ import android.app.*
 import android.bluetooth.*
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -16,6 +17,8 @@ import androidx.core.app.NotificationCompat
 import com.example.blue_esp.MainActivity
 import com.example.blue_esp.R
 import com.example.blue_esp.server.EspDataRepository
+import com.example.blue_esp.server.createKtorServer
+import io.ktor.server.engine.ApplicationEngine
 import java.util.*
 
 class BluetoothService : Service() {
@@ -24,6 +27,11 @@ class BluetoothService : Service() {
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var bluetoothGatt: BluetoothGatt? = null
     private val handler = Handler(Looper.getMainLooper())
+    private var ktorServer: ApplicationEngine? = null
+
+    private val scanSettings = ScanSettings.Builder()
+        .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+        .build()
 
     companion object {
         private const val TAG = "BluetoothService"
@@ -50,7 +58,16 @@ class BluetoothService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForegroundService()
+        if (ktorServer == null) {
+            ktorServer = createKtorServer().also { it.start(wait = false) }
+        }
         return START_STICKY
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        ktorServer?.stop(100, 100)
+        close()
     }
 
     private fun createNotificationChannel() {
@@ -120,21 +137,34 @@ class BluetoothService : Service() {
             }
         }
 
-        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-            handleData(characteristic)
+        // API 33+ override
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+            handleData(value)
         }
-        
+
+        // Pre-API 33 fallback
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            handleData(characteristic.value ?: return)
+        }
+
+        // API 33+ override
+        override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) handleData(value)
+        }
+
+        // Pre-API 33 fallback
+        @Suppress("DEPRECATION")
         override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
-            if (status == BluetoothGatt.GATT_SUCCESS) handleData(characteristic)
+            if (status == BluetoothGatt.GATT_SUCCESS) handleData(characteristic.value ?: return)
         }
     }
 
-    private fun handleData(characteristic: BluetoothGattCharacteristic) {
-        val data = characteristic.value
-        if (data != null && data.isNotEmpty()) {
-            val stringData = String(data)
+    private fun handleData(value: ByteArray) {
+        if (value.isNotEmpty()) {
+            val stringData = String(value)
             EspDataRepository.updateData(stringData)
-            broadcastUpdate(ACTION_DATA_AVAILABLE, characteristic)
+            broadcastUpdate(ACTION_DATA_AVAILABLE, stringData)
         }
     }
 
@@ -146,8 +176,14 @@ class BluetoothService : Service() {
                     gatt.setCharacteristicNotification(characteristic, true)
                     val descriptor = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
                     if (descriptor != null) {
-                        descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-                        gatt.writeDescriptor(descriptor)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+                        } else {
+                            @Suppress("DEPRECATION")
+                            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                            @Suppress("DEPRECATION")
+                            gatt.writeDescriptor(descriptor)
+                        }
                     }
                 }
             }
@@ -162,14 +198,12 @@ class BluetoothService : Service() {
     fun startDiscovery() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) return
         stopDiscovery()
-        bluetoothAdapter?.startDiscovery()
-        bluetoothAdapter?.bluetoothLeScanner?.startScan(leScanCallback)
+        bluetoothAdapter?.bluetoothLeScanner?.startScan(emptyList(), scanSettings, leScanCallback)
         handler.postDelayed({ stopDiscovery() }, 10000)
     }
 
     fun stopDiscovery() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) return
-        if (bluetoothAdapter?.isDiscovering == true) bluetoothAdapter?.cancelDiscovery()
         bluetoothAdapter?.bluetoothLeScanner?.stopScan(leScanCallback)
     }
 
@@ -194,10 +228,8 @@ class BluetoothService : Service() {
 
     private fun broadcastUpdate(action: String) = sendBroadcast(Intent(action))
 
-    private fun broadcastUpdate(action: String, characteristic: BluetoothGattCharacteristic) {
-        val intent = Intent(action)
-        val data = characteristic.value
-        if (data != null && data.isNotEmpty()) intent.putExtra(EXTRA_DATA, String(data))
+    private fun broadcastUpdate(action: String, data: String) {
+        val intent = Intent(action).apply { putExtra(EXTRA_DATA, data) }
         sendBroadcast(intent)
     }
 }
